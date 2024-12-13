@@ -1,6 +1,7 @@
 import cv2
 import numpy as np
-
+from extras.easy_dwpose.dwpose import DWposeDetector
+from extras.open_pose import OpenposeDetector
 
 def centered_canny(x: np.ndarray, canny_low_threshold, canny_high_threshold):
     assert isinstance(x, np.ndarray)
@@ -80,10 +81,26 @@ def cpds(x):
 
     return norm255(result, low=4, high=96).clip(0, 255).astype(np.uint8)
 
-from extras.easy_dwpose.dwpose import DWposeDetector
 def dwpose(x):
     detector = DWposeDetector()
     result = detector(x, output_type="np", include_hands=False, include_face=False)
 
     return result
+
+def openpose(x, stick_scaling=False):
+    detector = OpenposeDetector.from_pretrained().to()
+    result = detector(x, output_type="np", include_hands=False, include_face=False, xinsr_stick_scaling=stick_scaling)
+
+    return result
+
+def normalizedBG(image, threshold=200):
+    gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    edges = cv2.Canny(gray_image, 100, 200)
+    edge_pixels = image[edges == 255]
+    if len(edge_pixels) == 0:
+        return 255 - image
+    avg_brightness = np.mean(edge_pixels)
+    if avg_brightness > threshold:
+        return 255 - image
+    return image
 
