@@ -343,10 +343,9 @@ def add_tip_to_image(image_path):
         # 绘制文本
         draw.text((x, y), wrapped_text, font=font, fill=(255, 255, 255))
         
-        # 保存临时文件
-        temp_path = image_path.replace('.jpg', '_with_tip.jpg')
-        img.save(temp_path, quality=95)
-        return temp_path
+        # 直接返回修改后的图片对象
+        return img
+        
     except Exception as e:
         logger.error(f"添加提示文本到图片时出错: {str(e)}")
         return image_path
