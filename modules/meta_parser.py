@@ -6,7 +6,7 @@ from pathlib import Path
 import random
 
 import gradio as gr
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFont
 
 import fooocus_version
 import modules.config
@@ -25,6 +25,8 @@ from enhanced.minicpm import minicpm, MiniCPM
 import logging
 from enhanced.logger import format_name
 logger = logging.getLogger(format_name(__name__))
+
+import textwrap
 
 re_param_code = r'\s*(\w[\w \-/]+):\s*("(?:\\.|[^\\"])+"|[^,]*)(?:,|$)'
 re_param = re.compile(re_param_code)
@@ -267,19 +269,101 @@ def switch_layout_template(presetdata: dict | str, state_params, preset_url=''):
 
     return results
 
+def get_random_tip():
+    try:
+        with open('./tips.txt', 'r', encoding='utf-8') as f:
+            tips = f.readlines()
+        return random.choice([tip.strip() for tip in tips if tip.strip()])
+    except:
+        return ""
+
+def add_tip_to_image(image_path):
+    try:
+        # 读取图片
+        img = Image.open(image_path)
+        
+        # 获取随机提示
+        tip = get_random_tip()
+        if not tip:
+            return image_path
+            
+        # 创建可绘制对象
+        draw = ImageDraw.Draw(img)
+        
+        # 设置中文字体,按优先级尝试不同字体
+        font_size = 32
+        try:
+            # 按顺序尝试不同的中文字体
+            font_paths = [
+                #"./presets/fonts/SourceHanSansSC-Medium.otf",  # 思源黑体
+                #"./presets/fonts/SimHei.ttf",                  # 黑体
+                #"./presets/fonts/NotoSansSC-Medium.otf",       # Noto Sans SC
+                "C:/Windows/Fonts/微软雅黑.ttf",                 # 微软雅黑
+                "C:/Windows/Fonts/msyh.ttc",                    # 黑体
+
+            ]
+            
+            font = None
+            for font_path in font_paths:
+                try:
+                    if os.path.exists(font_path):
+                        font = ImageFont.truetype(font_path, font_size)
+                        break
+                except:
+                    continue
+                    
+            if font is None:
+                font = ImageFont.load_default()
+                font_size = 18  # 默认字体调小一点
+                
+        except:
+            font = ImageFont.load_default()
+            font_size = 18
+            
+        # 文本换行处理(中文每行大约20-25个字)
+        margin = 20
+        max_width = img.width - 2 * margin
+        wrapped_text = textwrap.fill(tip, width=25)
+        
+        # 计算文本大小
+        bbox = draw.textbbox((0, 0), wrapped_text, font=font)
+        text_width = bbox[2] - bbox[0]
+        text_height = bbox[3] - bbox[1]
+        
+        # 计算文本位置(垂直距离顶部1/4处居中)
+        x = (img.width - text_width) // 2
+        y = img.height - text_height - 50
+        
+        # 绘制文本背景
+        padding = 15  # 稍微加大内边距
+        draw.rectangle([x - padding, y - padding, 
+                       x + text_width + padding, y + text_height + padding], 
+                       fill=(0, 0, 0, 180))
+        
+        # 绘制文本
+        draw.text((x, y), wrapped_text, font=font, fill=(255, 255, 255))
+        
+        # 保存临时文件
+        temp_path = image_path.replace('.jpg', '_with_tip.jpg')
+        img.save(temp_path, quality=95)
+        return temp_path
+    except Exception as e:
+        logger.error(f"添加提示文本到图片时出错: {str(e)}")
+        return image_path
+
 def get_welcome_image(preset=None, is_mobile=False, is_change=False):
     path_welcome = os.path.abspath(f'./presets/welcome/')
     if preset:
         suffix = 'w' if not is_mobile else 'm'
         file_welcome = os.path.join(path_welcome, f'welcome_{preset}_{suffix}.jpg')
         if os.path.exists(file_welcome):
-            return file_welcome
+            return add_tip_to_image(file_welcome)
     if is_change:
         if is_mobile:
             file_welcome = os.path.join(path_welcome, 'welcome_0_m.jpg')
         else:
             file_welcome = os.path.join(path_welcome, 'welcome_0_w.jpg')
-        return file_welcome
+        return add_tip_to_image(file_welcome)
     file_welcome = os.path.join(path_welcome, 'welcome.png')
     file_suffix = 'welcome_w' if not is_mobile else 'welcome_m'
     welcomes = [p for p in get_files_from_folder(path_welcome, ['.jpg', '.jpeg', 'png'], file_suffix, None) if not p.startswith('.')]
